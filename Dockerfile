@@ -24,7 +24,7 @@ RUN cd /tmp/build/nginx/${NGINX_VERSION} && \
         --sbin-path=/usr/local/sbin/nginx \
         --conf-path=/etc/nginx/nginx.conf \
         --error-log-path=/var/log/nginx/error.log \
-        --pid-path=/var/run/nginx/nginx.pid \
+        --pid-path=/tmp/nginx.pid \
         --lock-path=/var/lock/nginx/nginx.lock \
         --http-log-path=/var/log/nginx/access.log \
         --http-client-body-temp-path=/tmp/nginx-client-body \
