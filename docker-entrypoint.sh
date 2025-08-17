@@ -118,6 +118,6 @@ fi
 # Clean up the temporary file.
 rm "$TEMP_TEMPLATE"
 
-stunnel4 -f
+stunnel4 -f /etc/stunnel/stunnel.conf
 
 exec "$@"
