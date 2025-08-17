@@ -118,6 +118,5 @@ fi
 # Clean up the temporary file.
 rm "$TEMP_TEMPLATE"
 
-stunnel4 
 
 exec "$@"
