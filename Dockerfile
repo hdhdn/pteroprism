@@ -110,5 +110,4 @@ EXPOSE 1935
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
-# ... other lines in your Dockerfile
-CMD ["nginx", "-g", "daemon off;",]
+CMD ["nginx", "-g", "daemon off;"]
