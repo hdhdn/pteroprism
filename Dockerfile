@@ -1,123 +1,113 @@
-#!/bin/bash
+FROM buildpack-deps:bullseye
 
-set -e
+ENV NGINX_VERSION nginx-1.18.0
+ENV NGINX_RTMP_MODULE_VERSION 1.2.1
 
-SERVER_IP=$(
-    curl -sf https://1.1.1.1/cdn-cgi/trace | grep -oP 'ip=\K.*' 2>/dev/null || \
-    curl -sf https://checkip.amazonaws.com 2>/dev/null || \
-    echo "unknown-ip"
-)
+RUN apt-get update && \
+    apt-get install -y ca-certificates openssl libssl-dev stunnel4 gettext && \
+    rm -rf /var/lib/apt/lists/*
 
-export STREAM_APP=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c12)
+RUN mkdir -p /tmp/build/nginx && \
+    cd /tmp/build/nginx && \
+    wget -O ${NGINX_VERSION}.tar.gz https://nginx.org/download/${NGINX_VERSION}.tar.gz && \
+    tar -zxf ${NGINX_VERSION}.tar.gz
 
-CONNECTION_INFO="# ======================================\n# ======================================\n# Your Stream Destination: rtmp://$SERVER_IP/$STREAM_APP\n# ======================================\n# Your Stream Key Does Not Matter\n# ======================================\n"
-echo -e "$CONNECTION_INFO" >&2
-{
-    echo -e "$CONNECTION_INFO"
-} > /proc/1/fd/1
+RUN mkdir -p /tmp/build/nginx-rtmp-module && \
+    cd /tmp/build/nginx-rtmp-module && \
+    wget -O nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION}.tar.gz https://github.com/arut/nginx-rtmp-module/archive/v${NGINX_RTMP_MODULE_VERSION}.tar.gz && \
+    tar -zxf nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION}.tar.gz && \
+    cd nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION}
 
-NGINX_TEMPLATE=/etc/nginx/nginx.conf.template
-NGINX_CONF=/etc/nginx/nginx.conf
-ENV_OK=0
+# nginx goes to /usr/local/nginx
+RUN cd /tmp/build/nginx/${NGINX_VERSION} && \
+    ./configure \
+        --sbin-path=/usr/local/sbin/nginx \
+        --conf-path=/etc/nginx/nginx.conf \
+        --error-log-path=/var/log/nginx/error.log \
+        --pid-path=/var/run/nginx/nginx.pid \
+        --lock-path=/var/lock/nginx/nginx.lock \
+        --http-log-path=/var/log/nginx/access.log \
+        --http-client-body-temp-path=/tmp/nginx-client-body \
+        --with-http_ssl_module \
+        --with-threads \
+        --with-ipv6 \
+        --add-module=/tmp/build/nginx-rtmp-module/nginx-rtmp-module-${NGINX_RTMP_MODULE_VERSION} && \
+    make -j $(getconf _NPROCESSORS_ONLN) CFLAGS="-Wno-error" && \
+    make install && \
+    mkdir /var/lock/nginx && \
+    rm -rf /tmp/build
 
-# Create a temporary file and copy the template to it.
-TEMP_TEMPLATE=$(mktemp)
-cp "$NGINX_TEMPLATE" "$TEMP_TEMPLATE"
+RUN ln -sf /dev/stdout /var/log/nginx/access.log && \
+    ln -sf /dev/stderr /var/log/nginx/error.log
 
-if [ -n "${YOUTUBE_KEY}" ]; then
-    echo "Youtube activate."
-    sed -i 's|#youtube|push '"$YOUTUBE_URL"'${YOUTUBE_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#youtube| |g' "$TEMP_TEMPLATE"
-fi
+COPY nginx/nginx.conf.template /etc/nginx/nginx.conf.template
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
 
-if [ -n "${FACEBOOK_KEY}" ]; then
-    echo "Facebook activate."
-    sed -i 's|#facebook|push '"$FACEBOOK_URL"'${FACEBOOK_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#facebook| |g' "$TEMP_TEMPLATE"
-fi
+# Config Stunnel
+RUN mkdir -p  /etc/stunnel/conf.d
+COPY stunnel/stunnel.conf /etc/stunnel/stunnel.conf
+COPY stunnel/stunnel4 /etc/default/stunnel4
 
-if [ -n "${INSTAGRAM_KEY}" ]; then
-    echo "Instagram activate."
-    sed -i 's|#instagram|push '"$INSTAGRAM_URL"'${INSTAGRAM_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#instagram| |g' "$TEMP_TEMPLATE"
-fi
+#Facebook Stunnel Port 19350
+COPY stunnel/facebook.conf /etc/stunnel/conf.d/facebook.conf
 
-if [ -n "${CLOUDFLARE_KEY}" ]; then
-    echo "Cloudflare activate."
-    sed -i 's|#cloudflare|push '"$CLOUDFLARE_URL"'${CLOUDFLARE_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#cloudflare| |g' "$TEMP_TEMPLATE"
-fi
+#Instagram Stunnel Port 19351
+COPY stunnel/instagram.conf /etc/stunnel/conf.d/instagram.conf
 
-if [ -n "${TWITCH_KEY}" ]; then
-    echo "Twitch activate."
-    sed -i 's|#twitch|push '"$TWITCH_URL"'${TWITCH_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#twitch| |g' "$TEMP_TEMPLATE"
-fi
+#Cloudflare Stunnel Port 19352
+COPY stunnel/cloudflare.conf /etc/stunnel/conf.d/cloudflare.conf
 
-if [ -n "${RTMP1_KEY}" ]; then
-    echo "Rtmp1 activate."
-    sed -i 's|#rtmp1|push '"$RTMP1_URL"'${RTMP1_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#rtmp1| |g' "$TEMP_TEMPLATE"
-fi
+#Kick Stunnel Port 19353
+COPY stunnel/kick.conf /etc/stunnel/conf.d/kick.conf
 
-if [ -n "${RTMP2_KEY}" ]; then
-    echo "Rtmp2 activate."
-    sed -i 's|#rtmp2|push '"$RTMP2_URL"'${RTMP2_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#rtmp2| |g' "$TEMP_TEMPLATE"
-fi
+#Youtube
+ENV YOUTUBE_URL rtmp://a.rtmp.youtube.com/live2/
+ENV YOUTUBE_KEY ""
 
-if [ -n "${RTMP3_KEY}" ]; then
-    echo "Rtmp3 activate."
-    sed -i 's|#rtmp3|push '"$RTMP3_URL"'${RTMP3_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#rtmp3| |g' "$TEMP_TEMPLATE"
-fi
+#Facebook
+ENV FACEBOOK_URL rtmp://127.0.0.1:19350/rtmp/
+ENV FACEBOOK_KEY ""
 
-if [ -n "${TROVO_KEY}" ]; then
-    echo "Trovo activate."
-    sed -i 's|#trovo|push '"$TROVO_URL"'${TROVO_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#trovo| |g' "$TEMP_TEMPLATE"
-fi
+#Instagram
+ENV INSTAGRAM_URL rtmp://127.0.0.1:19351/rtmp/
+ENV INSTAGRAM_KEY ""
 
-if [ -n "${KICK_KEY}" ]; then
-    echo "Kick activate."
-    sed -i 's|#kick|push '"$KICK_URL"'${KICK_KEY};|g' "$TEMP_TEMPLATE"
-    ENV_OK=1
-else
-    sed -i 's|#kick| |g' "$TEMP_TEMPLATE"
-fi
+#Cloudflare
+ENV CLOUDFLARE_URL rtmp://127.0.0.1:19352/live/
+ENV CLOUDFLARE_KEY ""
 
-if [ $ENV_OK -eq 1 ]; then
-    envsubst < "$TEMP_TEMPLATE" > "$NGINX_CONF"
-else
-    echo "Start local server."
-fi
+#Twitch
+ENV TWITCH_URL ""
+ENV TWITCH_KEY ""
 
-if [ -n "${DEBUG}" ]; then
-    echo "$NGINX_CONF"
-    cat "$NGINX_CONF"
-fi
+#Rtmp1
+ENV RTMP1_URL ""
+ENV RTMP1_KEY ""
 
-# Clean up the temporary file.
-rm "$TEMP_TEMPLATE"
+#Rtmp2
+ENV RTMP2_URL ""
+ENV RTMP2_KEY ""
 
-stunnel4
+#Rtmp3
+ENV RTMP3_URL ""
+ENV RTMP3_KEY ""
 
-exec "$@"
+#Trovo
+ENV TROVO_URL rtmp://livepush.trovo.live/live/
+ENV TROVO_KEY ""
+
+#Kick
+ENV KICK_URL rtmp://127.0.0.1:19353/kick/
+ENV KICK_KEY ""
+
+ENV DEBUG ""
+
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN chmod +x /docker-entrypoint.sh
+
+EXPOSE 1935
+
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+CMD ["nginx", "-g", "daemon off;"]
