@@ -105,7 +105,8 @@ else
 fi
 
 if [ $ENV_OK -eq 1 ]; then
-    envsubst < "$TEMP_TEMPLATE" > "$NGINX_CONF"
+    envsubst < "$TEMP_TEMPLATE" > "/tmp/nginx.conf"
+    mv "/tmp/nginx.conf" "$NGINX_CONF"
 else
     echo "Start local server."
 fi
