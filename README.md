@@ -1,4 +1,4 @@
-All Credit To Prism Team, This Is Just My Attempt To Fix An Error A Member Discovered
+All Credit To Prism Team, This Is Just My Attempt To Fix An Error Caused When Attempting To Run This Inside The pterodactyl Pane Management Software
 # Prism: Self-hosted Multistreaming Solution
 
 ## NOW WITH SECURITY FEATURE
