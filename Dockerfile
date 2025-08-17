@@ -111,4 +111,4 @@ EXPOSE 1935
 ENTRYPOINT ["/docker-entrypoint.sh"]
 
 # ... other lines in your Dockerfile
-CMD ["nginx", "-g", "daemon off;", "stunnel4", "-f", "/etc/stunnel/stunnel.conf"]
+CMD ["nginx", "-g", "daemon off;",]
