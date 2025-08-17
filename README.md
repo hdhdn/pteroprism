@@ -1,3 +1,4 @@
+All Credit To Prism Team, This Is Just My Attempt To Fix An Error A Member Discovered
 # Prism: Self-hosted Multistreaming Solution
 
 ## NOW WITH SECURITY FEATURE
